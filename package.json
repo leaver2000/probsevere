@@ -1,8 +1,10 @@
 {
   "name": "probsevere",
   "version": "1.0.0",
-  "main": "index.js",
   "license": "MIT",
+  "scripts": {
+      "test": "nodemon test.py"
+  },
   "dependencies": {
     "nodemon": "^2.0.13"
   }

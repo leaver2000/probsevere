@@ -4,49 +4,92 @@ VERSION = '3.0.1'
 TYPE = 'FeatureCollection'
 PRODUCT = "probSevere:vectors"
 SOURCE = "NOAA/NCEP Central Operations"
+PRINT_DIV ='----------------\n'
+PRINT_BR ='\n################\n'
 
-
-class StormTrackVector:
+class StormVectors:
     """
     StormTrackVector maintains a persistent memory state to itterate over previous storm
     Id's and attempts to predict the next position.
     """
     _stv = {}
+    count = 0
+    def _motion_slope(self,me,ms):
+        a = np.array([me,ms],dtype=np.float32)
+        _motion = np.multiply(a,[1,-1],dtype=np.float32)
+        _slope=np.divide(*_motion[[1,0]])
+        return(_motion,_slope)
 
     def set_vector(self, _id=None, center=None, motion_east=None, motion_south=None):
         self._id = _id
         self._center = center
-        me = float(motion_east)
-        # convert motion south to motion north
-        mn = np.multiply(float(motion_south), -1)
-        self.motion = np.array([me, mn])
-        slope = np.divide(mn, me)
+        motion,slope=self._motion_slope(motion_east,motion_south)
+
+        # self._motion = motion
+        # self._slope = slope
+
+
+        
 
         if _id in self._stv.keys():
-            # additional development
-            # is required to apply
-            # a correction to the
-            # expected vector based
-            # on the previous deviation
-            pass
+
+            _prevS= self._stv[_id]
+            
+            # previous _mps_correction prog
+            # _vs = self._predictions()
+            sm_fcst=_prevS["storm_motion"][0]
+            predicition =np.array([sm_fcst,center])
+            
+            diff = np.diff(predicition,axis=0)
+            dM_dT = np.rollaxis(np.array([_prevS["motion"],motion]), 1, 0)
+
+
+
+            # change in movement change in time
+            print('[lon,lat]')
+            print(f'{sm_fcst}#expected\n{center}#actual')
+            print(f'{diff}#diff' )
+            print(f'{PRINT_DIV}[[mpsE,mpsN]#previous\n [mpsE,mpsN]]#current')
+            print(dM_dT)
+            # storm motion change
+            print('2 min change in motion_vector:mps')
+            print(np.diff(dM_dT).reshape(1,2))
+            print(PRINT_BR)
+
+            self._stv[_id] = {
+                "motion": motion,#self._motion,#np.array(self.motion),
+                # "changeInMotion":np.diff(dM_dT),
+                "center": center,
+                "slope": slope,
+                "storm_motion": self._mps_correction(motion,)
+            }
 
         else:
             self._stv[_id] = {
-                "motion": self.motion,
+                "motion":motion,#self._motion,# np.array(self.motion),
                 "center": center,
                 "slope": slope,
-                "vector_space": self._space()
+                "storm_motion": self._mps_correction(motion)
             }
+    def _predictions(self):
+        pass
+    # def _offsets(self):
+    #     time_offset = [120, 900, 1800, 2700, 3600]  # mps offset for 15,30,45,60
+    #     return[np.multiply(self._motion, x) for x in time_offset]
 
-    def _offsets(self):
-        time_offset = [900, 1800, 2700, 3600]  # mps offset for 15,30,45,60
-        return[np.multiply(self.motion, x) for x in time_offset]
+    def _mps_correction(self,mps=None):
+        """
+        
+        """
+        time_offset = [120, 900, 1800, 2700, 3600]  # mps offset for 15,30,45,60
+        # offsets=[np.multiply(self._motion, x) for x in time_offset]
+        offsets=[np.multiply(mps, x) for x in time_offset]
 
-    def _space(self):
         lat, lon = self._center
         arr = []
         R = 6378137
-        for dn, de in self._offsets():
+        # for dn, de in self._offsets():
+        for dn, de in offsets:
             # Coordinate offsets in radians
             dLat = dn/R
             radLat = np.multiply(np.pi, lat/180)
@@ -59,10 +102,10 @@ class StormTrackVector:
 
     def _multi_line_string(self):
         mls = self._stv[self._id]
-        return [mls['vector_space']]
+        return [mls['storm_motion']]
 
 
-stv = StormTrackVector()
+sv = StormVectors()
 
 
 class ProbSevere:
@@ -70,7 +113,7 @@ class ProbSevere:
     probsevere class is an API for a probsevere featurecollection
 
     """
-    features = []
+    _features = []
 
     def __init__(self, valid_time=None, features=None):
         self.feature_collection = {
@@ -79,11 +122,11 @@ class ProbSevere:
             'validtime': valid_time,
             'product': PRODUCT,
             'source': SOURCE,
-            'features': features,
+            'features': self._features,
         }
-        for feat in features:
-            self._reduce(feat)
-        return
+        [self._reduce(feat) for feat in features]
+
+        return None
 
     def _reduce(self, feat):
         geometries = []
@@ -106,12 +149,12 @@ class ProbSevere:
         storm_id = props['ID']
         mtn_s = props['MOTION_SOUTH']
         mtn_e = props['MOTION_EAST']
-        stv.set_vector(_id=storm_id, motion_east=mtn_e,
+        sv.set_vector(_id=storm_id, motion_east=mtn_e,
                        motion_south=mtn_s, center=center)
 
         geometries.append({
             'type': 'MultiLineString',
-            'coordinates': stv._multi_line_string()
+            'coordinates': sv._multi_line_string()
         })
 
         ################################|   PROB SEVERE POLLYGON    |############################################
@@ -120,6 +163,6 @@ class ProbSevere:
         }
 
         del feat['models']
-        self.features.append(feat)
+        self._features.append(feat)
 
         return None
