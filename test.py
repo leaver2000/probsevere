@@ -12,35 +12,30 @@ def get_feats_by_id(features,_id):
         if feat['properties']['ID']== _id:
             arr.append(feat)
         else:
+            # print()
             pass
     return arr
         # print()
 
 
-def get_sample_data(filepath):
+def get_sample_data(filepath, storm_id=None):
+    # print(storm_id)
     with open(filepath, 'r') as f:
         fc = json.load(f)
         vt = fc['validTime']
-        feats = get_feats_by_id(fc['features'],'692025')
-        return ProbSevere(valid_time=vt, features=feats)
+        if storm_id is None:
+
+        # feats = get_feats_by_id(fc['features'],'692025')
+
+            return ProbSevere(valid_time=vt, features=fc['features'])
+        else:
+            feats = get_feats_by_id(fc['features'],storm_id)
+            # print(feats)
+            return ProbSevere(valid_time=vt,features=feats)
 
 
-
-    # print(feats)
-    # pprint(feats)
 
 
 for filename in glob(os.path.join('sample_data/', '*.json')):
-    ps = get_sample_data(filename)
+    ps=get_sample_data(filename, storm_id='692025')
     # pprint(ps.feature_collection)
-    # print(filename)
-
-# features = ps.feature_collection['features']
-# print(features)
-    # print(feats[0])
-    # for feat in feats:
-    #     print(feat)
-
-#     ps = ProbSevere(valid_time=vt, features=feats
-# 
-# print(features)
