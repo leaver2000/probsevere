@@ -2,6 +2,7 @@
 
 ProbSevere is a rapidly updating real-time system, which integrates remotely sensed observations of thunderstorms and mesoscale NWP, producing short-term probabilistic guidance of future severity. Specifically, ProbSevere predicts the probabilities of severe hail, severe wind, tornado, or any severe weather in the next 60 minutes for every storm over the CONUS.
 
+This python module attemps to extend the ProbSevere model by applying various storm motion vectors.
 
 
 ![image](https://user-images.githubusercontent.com/76945789/135806503-02ba51bd-9af2-499a-81b1-9089104fe9a1.png)
