@@ -1,4 +1,13 @@
 # binder
+![image](https://user-images.githubusercontent.com/76945789/135806394-5e704ad4-3e5f-4126-be33-6ff0da583ab4.png)
+
+![image](https://user-images.githubusercontent.com/76945789/135806417-2e23e8d0-1d8c-4495-b9bd-c32ecbf7565d.png)
+
+![image](https://user-images.githubusercontent.com/76945789/135806427-562dc038-2ac5-4f61-ad9e-26da777e203e.png)
+
+![image](https://user-images.githubusercontent.com/76945789/135806432-0915fdeb-4e6b-4f1c-a15c-73dc534cfb04.png)
+
+![image](https://user-images.githubusercontent.com/76945789/135806440-604f02a5-603a-404e-b14b-f1b2a1ec39fb.png)
 
 ```python
 stm=storm[691240]
