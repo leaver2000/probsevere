@@ -4,7 +4,27 @@ from pprint import pprint
 from glob import glob
 import os
 from pprint import pprint
+from types import SimpleNamespace
 
+
+
+def load(feature):
+    jd = json.dumps(feature)
+    print(jd)
+    return json.loads(jd, object_hook=lambda d: SimpleNamespace(**d))
+
+
+# ? schedule itterator to run every 8 mins
+def ready(featureCollection):
+    for feature in featureCollection['features']:
+        print()
+        geometry = load(feature['geometry'])
+        properties = load(feature['properties'])
+        print(geometry.coordinates,'\n',properties.ID)
+        
+
+
+ready(json.load(open('sample_data/MRMS_PROBSEVERE_20210925_144634.json')))
 
 def get_feats_by_id(features,_id):
     arr =[]
@@ -36,6 +56,6 @@ def get_sample_data(filepath, storm_id=None):
 
 
 
-for filename in glob(os.path.join('sample_data/', '*.json')):
-    ps=get_sample_data(filename, storm_id='692025')
+# for filename in glob(os.path.join('sample_data/', '*.json')):
+#     ps=get_sample_data(filename, storm_id='692025')
     # pprint(ps.feature_collection)
