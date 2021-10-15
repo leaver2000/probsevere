@@ -1,8 +1,8 @@
-name: dev-env
+name: probsevere
 channels:
   - conda-forge
 dependencies:
-  - python=3.9
+  # - python=3.9
   - numpy
   - pandas
   - matplotlib
@@ -11,9 +11,8 @@ dependencies:
   - pygrib
   - lxml 
   - pymongo
-  - ipykernel
-  - jupyterlab
 
 
-#*  conda env create --file dev-env.yml
-#*  conda env update --file dev-env.yml --prune
+
+#*  conda env create --file environment.yml
+#*  conda env update --file environment.yml --prune
