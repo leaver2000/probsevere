@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-      "test": "nodemon test.py"
+    "start": "nodemon probsevere",
+    "test": "nodemon test.py"
   },
   "dependencies": {
     "nodemon": "^2.0.13"
