@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "start": "nodemon probsevere",
+    "start": "nodemon --watch src/ --exec python3 src ",
     "test": "nodemon test.py"
   },
   "dependencies": {
