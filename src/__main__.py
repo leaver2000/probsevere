@@ -3,6 +3,11 @@ from sklearn.metrics.pairwise import haversine_distances
 import json
 from probsevere import ProbSevere
 from pprint import pprint
+
+from glob import glob
+import os
+
+
 samples = [
     # 'sample_data/MRMS_PROBSEVERE_20211011_000053.json',
     'sample_data/MRMS_PROBSEVERE_20211011_000240.json',
@@ -31,9 +36,16 @@ keys =[
 
 if __name__ == '__main__':
     # print('hello')
+    # print(glob)
+    paths = glob(os.path.join('sample_data/', '*.json'))
+    paths.sort()
+    # print(glob('sample_data/', '*.json'))
+    print(paths)
 
-    for sample in samples:
-        feature = json.load(open(sample))
+
+    for path in paths:
+        # print(path)
+        feature = json.load(open(path))
         ps = ProbSevere(feature).storms
         # ps.getCollection()
 

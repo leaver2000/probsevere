@@ -4,8 +4,10 @@ from types import SimpleNamespace
 import numpy as np
 from sklearn.metrics.pairwise import haversine_distances
 from sklearn.linear_model import LinearRegression
+from geopy import distance
 from pprint import pprint
-
+from datetime import datetime
+import re
 PROPSKEYS =[
     'MUCAPE',
     'MLCAPE',
@@ -21,60 +23,139 @@ PROPSKEYS =[
     'P98LLAZ',
     'P98MLAZ'
 ]
-
+class AsClass:
+    def __init__(self,dict):
+        for key in dict.keys():
+            setattr(self,key,dict[key])
 
 class Storms:
     _storm = {}
     _props={}
-    def set(self,_id=None,coordinates=None,properties=None):
-        center = np.mean(np.squeeze(coordinates),axis=0)
+    def set(self,validTime=None,_id=None,coordinates=None,properties=None):
+        coordinates=np.squeeze(coordinates)
+        center = np.mean(coordinates,axis=0)
         p = np.array(list(properties.values()))[:13]
         props =np.array(p,dtype=np.float16)
         
-        # print(props)
-
-        # self._id = _id
-
-
-        # self._id = self._storm[_id]
-
         if _id not in self._storm.keys():
-            self._props[_id]= props
+            self._props[_id] = props
             self._storm[_id]={
                 'count':1,
-                'coordinates':np.array(coordinates),
+                'coordinates':coordinates,
                 'center':center,
-                'centers':[center],
                 'props':props,
-                'propsHistory':[props]
+                'motion':{
+                    'mps':None
+                },
+                'history':{
+                    'props':[props],
+                    'centers':[center],
+                    'mps':np.array([]),
+                    # 'smv':np.array([])
+                }
             }
         else:
             that = self._storm[_id]
-            motion =self._motion([that['center'],center])
+            hist = that['history']
+            mps,smv =self._motion(that['center'], center)
+            # avgmps = 
+            lp = self._linearProg(center,smv)
 
 
 
             self._storm[_id]={
                 'count': that['count']+1,
-                'coordinates':np.array(coordinates),
+                'coordinates':coordinates,
                 'center':center,
-                'centers':np.append(that['centers'],[center],axis=0),
-                'motion':motion,
                 'props':props,
-                'propsHistory':[*that['propsHistory'],props],
-                'propsChange':np.diff([that['props'],props],axis=0)
+                'mps':mps,
+                'motion':smv,
+                'stormTracks':{
+                    'linear':lp
+                },
+                'change':{
+                    'props':np.diff([hist['props'][-1],props],axis=0)
+                },
+                'history':{
+                    'props':np.append(hist['props'],[props],axis=0),
+                    'centers':np.append(hist['centers'],[center],axis=0),
+                    'mps':np.append(hist['mps'],[mps],axis=0),
+                    'smv': [smv] if len(hist['mps']) == 0 else np.concatenate((hist['mps'], [mps]), axis=0)
+                }
             }
+            # print(smv)
             this = self._storm[_id]
-            print(f'\n{_id}\nthat',that,'\nthis',this)
+            # count = this['count']
+            thisHist = this['history']
+            thisChng = this['change']
+            thisTracks = this['stormTracks']
+            Dmps = np.diff(thisHist['mps'])
 
-            # self._storm[_id]['center'] = np.append(self._storm[_id]['center'],[center],axis=0)
+            # ###############
+            storm = AsClass(self._storm[_id])
+            # print(ac.count)
+            if storm.count > 10:
+                print(f'\n storm:\n {_id}')
+                hst = AsClass(storm.history)
+                # print(f'{hst.smv.shape()}')
+                # b = np.reshape(hst.smv)
+                # hst.smv.reshape()
+                # print([smv])
+                # print(col.history)
+
+            #     print(_id,count)
+
+
+            # if
+            # print(len(thisHist['smv']))
+
+
 
             return None
     # def get_
-    def _motion(self,position):
-        rads = np.radians(position)
-        D2min=haversine_distances(rads)
-        return D2min* 6371000/1000
+    def _linearProg(self,center,smv):
+        if False:
+            print('\ncenter:\n',center,'\nsmv:\n',smv)
+            print(smv*120)
+        # centerRads = np.radians(center)
+        # motion is meters/p 2min
+        # print(Dcrds)
+        # radsOffset = np.multiply(centerRads,(Dcrds*3600))
+        # print(center, radsOffset* 6371000/1000)
+        return None
+
+
+    # def _speed(self)
+
+
+
+    def _motion(self,start,stop):# start and stop center points for a single storm ID over 2 min span
+        # get the diffrence in postion
+        diff = np.diff([start,stop],axis=0)
+        # if the diff y value is neagtive the storm moved south
+        # if the diff x value is neagtive the storm moved west
+        vector = np.where(diff>0,1,-1)
+
+        mps = distance.distance(*np.flip([start,stop])).meters / 120
+        rads = np.radians([start,stop])
+        # # haversine distance between 2 points
+        # # convert 2 min to second
+        # # radians per second
+
+        result = haversine_distances(rads)
+        # multiply by Earth radius to get kilometers
+
+        motion = result * 6371000 / 120
+        storm_motion_vector = np.multiply(motion,vector)
+        if False:
+            print(f'\nstart position:\n {start}')
+            print(f'stop position:\n {stop}')
+            print(f'diffrence:\n {diff}')
+            print(f'speed:\n {mps} mps')
+            print(f'storm motion vector:\n   x           y\n{storm_motion_vector}')
+
+        return mps, storm_motion_vector
+
 
     def _ziplist(self,props):
         result = zip(PROPSKEYS, props)
@@ -142,8 +223,11 @@ keys =[
 
 class ProbSevere:
     def __init__(self,features):
-        meta = self._load(features)
-        print(meta.validTime)
+        x = self._load(features)
+        b = datetime.strptime(x.validTime[:-4], '%Y%m%d_%H%M%S')
+        # print()
+        if b.minute % 10 == 0:
+            print(x.validTime)
         for feature in features['features']:
             coordinates = self._load(feature['geometry']['coordinates'])
             properties = feature['properties']
@@ -154,10 +238,13 @@ class ProbSevere:
             # b = list(props.values())
             # print(np.array(b)[:-7])
             # print
+            
 
 
 
-            storm.set(_id=_id,coordinates=coordinates, properties=properties)
+            storm.set(_id=_id,validTime=x.validTime, coordinates=coordinates, properties=properties)
+
+
         self.storms = storm
         pass
 
