@@ -2,16 +2,17 @@
 import json
 from types import SimpleNamespace
 import numpy as np
-from numpy.core.arrayprint import _make_options_dict
+# from numpy.core.arrayprint import _make_options_dict
 from sklearn.metrics.pairwise import haversine_distances
 from sklearn.linear_model import LinearRegression
-from geopy import Point, distance
+from geopy import distance
 # from geopy import Point
 # from geopy.distance import distance, VincentyDistance
 from pprint import pprint
 from datetime import datetime
-import re
+# import re
 R = 6371000
+RANGE = 5
 PROPSKEYS = [
     'MUCAPE',
     'MLCAPE',
@@ -31,7 +32,6 @@ PROPSKEYS = [
 
 class History:
     def __init__(self, validTime):
-        # print(validTime)
         pass
 
 
@@ -40,10 +40,10 @@ class Storms:
     _verbose = False
 
     def set(self, validTime=None, _id=None, coordinates=None, properties=None):
-        coordinates = np.squeeze(coordinates)
-        center = np.mean(coordinates, axis=0)
-        p = np.array(list(properties.values()))[:13]
-        props = np.array(p, dtype=np.float16)
+        crds = np.squeeze(coordinates)
+        cent = np.mean(crds, axis=0)
+        propV = np.array(list(properties.values()))[:13]
+        props = np.array(propV, dtype=np.float16)
 
         if _id not in self._storm.keys():
             self._storm[_id] = History(validTime)
@@ -51,8 +51,8 @@ class Storms:
 
             # ? first order attributes
             x.count = 1
-            x.coordinates = coordinates
-            x.center = center
+            x.coordinates = crds
+            x.center = cent
             x.props = props
 
             # ? second/third order placeholders
@@ -68,12 +68,12 @@ class Storms:
             x = self._storm[_id]
 
             # * pass x.center and current center to return meters/second and storm motion vector
-            mps, smv = self._motion(x.center, center)
+            mps, smv = self._motion(x.center, cent)
 
             # ? first order attributes
             x.count = x.count + 1
-            x.coordinates = coordinates
-            x.center = center
+            x.coordinates = crds
+            x.center = cent
             x.props = props
 
             # ? second order attributes
@@ -86,15 +86,15 @@ class Storms:
                 'mps': [mps] if y['smv'] is None else [*y['mps'], mps],
                 'smv': [smv] if y['smv'] is None else [*y['smv'], smv]
             }
-            _range = 5
-            if x.count > _range:
+
+            if x.count > RANGE:
                 # offsets = [900, 1800, 2700, 3600]
 
                 # ? average speed over last {_range}
-                avg_smv = np.mean(x.hst['smv'][:-_range+1], axis=0)
+                avg_smv = np.mean(x.hst['smv'][:-RANGE+1], axis=0)
                 D60 = avg_smv*3600  # ? X 3600 = per hour
 
-                lat, lon = center  # ? destructure center
+                lat, lon = cent  # ? destructure center
 
                 Dy, Dx = D60.flatten()  # ? destructure change in ( Y, X )
 
@@ -107,7 +107,7 @@ class Storms:
                 if self._verbose:
                     print('____________________________________________________\n')
                     print(f'\nstorm  count\n{_id}  {x.count}\n')
-                    print(f'start pos:\n {center}\n')
+                    print(f'start pos:\n {cent}\n')
                     print(D60, Dy, Dx)
                     print(f'pos1hr:\n {[lat60,lon60]}')
 
@@ -181,13 +181,6 @@ class Storms:
 
         except:
             pass
-        # print()
-        # return {
-        #     'coordinates':list(this['coordinates'])
-
-        # }
-
-        # return self._storm
 
     def getById(self, _id):
         return self._storm[_id]
@@ -239,12 +232,6 @@ class ProbSevere:
             coordinates = self._load(feature['geometry']['coordinates'])
             properties = feature['properties']
             _id = properties['ID']
-            # properties = self._load(feature['properties'])
-
-            # print(list(props.keys())[-7])
-            # b = list(props.values())
-            # print(np.array(b)[:-7])
-            # print
 
             storm.set(_id=_id, validTime=x.validTime,
                       coordinates=coordinates, properties=properties)
