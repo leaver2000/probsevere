@@ -48,7 +48,7 @@ if __name__ == '__main__':
     for path in paths:
         # print(path)
         feature = json.load(open(path))
-        ps = ProbSevere(feature).storms
+        ps = ProbSevere(feature)
         # print(ps.tracks)
         # ps.getCollection()
 

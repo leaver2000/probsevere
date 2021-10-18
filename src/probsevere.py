@@ -45,29 +45,38 @@ class Storms:
         propV = np.array(list(properties.values()))[:13]
         props = np.array(propV, dtype=np.float16)
 
+        # * if the _storm object does not contain the _storm[_id] key a new _storm[_id] object is created
         if _id not in self._storm.keys():
-            self._storm[_id] = History(validTime)
-            x = self._storm[_id]
+
+            self._storm[_id] = History(validTime)  # *  initialize _storm[_id]
+            x = self._storm[_id]  # *      x is given the value of _storm[_id]
 
             # ? first order attributes
             x.count = 1
             x.coordinates = crds
             x.center = cent
             x.props = props
-
-            # ? second/third order placeholders
-            x.mps = None
-            x.smv = None
-            x.hst = {
-                'mps': None,
-                'smv': None
+            x.time = {
+                'start': validTime,
+                'end': validTime
             }
 
-        else:
-            # * set x to previous storm attributes
-            x = self._storm[_id]
+            # ? second, third, & fouth order placeholders
+            x.mps = None  # *   meters per second
+            x.smv = None  # * storm motion vector
+            x.hst = {
+                'mps': None,  # *  meters per second history
+                'smv': None  # * storm motion vector history
+            }
+            x.mpsX = None  # * meters per second maX
+            x.mpsN = None  # * meters per second miN
+            x.mpsA = None  # * meters per second Avg
 
-            # * pass x.center and current center to return meters/second and storm motion vector
+        else:
+
+            x = self._storm[_id]  # * x is set to previous _storm[_id]
+
+            # * pass x.center and current center returns meters/second and the storm motion vector
             mps, smv = self._motion(x.center, cent)
 
             # ? first order attributes
@@ -75,6 +84,7 @@ class Storms:
             x.coordinates = crds
             x.center = cent
             x.props = props
+            x.time['end'] = validTime
 
             # ? second order attributes
             x.mps = mps  # * meters per second
@@ -83,11 +93,17 @@ class Storms:
             # ? third order storm history attributes
             y = x.hst
             x.hst = {
-                'mps': [mps] if y['smv'] is None else [*y['mps'], mps],
+                'mps': [mps] if y['mps'] is None else [*y['mps'], mps],
                 'smv': [smv] if y['smv'] is None else [*y['smv'], smv]
             }
 
+            # ? fourth order storm history mins/max/avg
+            x.mpsX = np.max(x.hst['mps'])  # * meters per second maX
+            x.mpsN = np.min(x.hst['mps'])
+            x.mpsA = np.mean(x.hst['mps'])
+
             if x.count > RANGE:
+
                 # offsets = [900, 1800, 2700, 3600]
 
                 # ? average speed over last {_range}
@@ -225,7 +241,7 @@ class ProbSevere:
     def __init__(self, features):
         x = self._load(features)
         b = datetime.strptime(x.validTime[:-4], '%Y%m%d_%H%M%S')
-        # print()
+
         if b.minute % 10 == 0:
             print(x.validTime)
         for feature in features['features']:
@@ -235,21 +251,32 @@ class ProbSevere:
 
             storm.set(_id=_id, validTime=x.validTime,
                       coordinates=coordinates, properties=properties)
+            # stm = storm.getById(_id)
+
             motion = storm.getMotion(_id)
-            # print(tracks)
             if motion is not None:
                 center, mps, tracks = motion
-                if int(properties['PS']) > 40:
+                # if int(properties['PS']) > 20:
+                feature['models']['probtrack'] = {
+                    'center': [center.tolist()],
+                    'linear': [tracks.tolist()]
+                }
+
+                # pprint(feature['models'])
+                if False:
+
                     print(f'\nstormId: {_id}')
+                    print(stm.time)
                     print(f'probSevere: {properties["PS"]}%')
                     print(f'start:\n {center}')
                     print(f'mps:\n {mps}')
                     print(f'knots:\n {mps*1.94384}')
-                    print(f'coordinates @ 1hr:\n {tracks}')
+                    print(f'coordinates @ 1hr:\n {tracks.tolist()}')
+
                     # print()
                     # print(f'{center}\n{mps}\n{tracks}')
 
-        self.storms = storm
+        # self.storms = storm
         pass
 
     def _load(self, feature):
