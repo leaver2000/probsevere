@@ -1,83 +1,68 @@
-import numpy as np
-from sklearn.metrics.pairwise import haversine_distances
-import json
-from probsevere import ProbSevere
-from pprint import pprint
-from glob import glob
 import os
+import json
+from glob import glob
+import sched
+import time
+from controller import Controller
+from helpers import utc_now
 
-# controller
-# from urllib import request
-from urllib import request
-import requests
-from datetime import datetime
-import pandas as pd
-import re
-keys = [
-    'MUCAPE',
-    'MLCAPE',
-    'MLCIN',
-    'EBSHEAR',  # EFFECTIVE BULK SHEAR
-    'SRH01KM',
-    'MEANWIND_1-3kmAGL',
-    'MESH',  # maximum estimated size of hail
-    'VIL_DENSITY',
-    'FLASH_RATE',
-    'FLASH_DENSITY',
-    'MAXLLAZ',
-    'P98LLAZ',
-    'P98MLAZ',
-]
-
-class Controller:
-
-    def __init__(self):
-        pass
-
-    def collect (self):
-        url = f"https://mrms.ncep.noaa.gov/data/ProbSevere/PROBSEVERE/"
-        query = "?C=M;O=D"
-        page = pd.read_html(url+query)
-        prods = np.array(page[0][2:-1])
-        files = prods[:, [0]].flatten()[0]
-        resp = requests.get(url=url+files).json()
-        self.feature_collection = resp
-    
-    def process(self):
-        ps = ProbSevere(self.feature_collection)
-        print(ps.feature_collection)
-
-        pass
+TEST = False
 
 
+def start():
 
-
-
-
-
-
-
-
-
-
-if False:
-# if __name__ == '__main__':
+    print(f'\ncontroller initialized at {utc_now()}')
     ctrl = Controller()
-    ctrl.collect()
-    ctrl.process()
+    state = ctrl.state
+
+    ctrl.collect()  # ? scrape mrms dataset
+
+    if state.collect is not None:
+        ctrl.validate()  # ? validate data requirement
+        ctrl.process()  # ? process data
+        if ctrl.datetime.minute % 10 == 0:
+            ctrl.save()
+
+    else:
+        print('skipping save on non 10 min interval')
+
+    print(f'\ncontroller routine completed {utc_now()}\n state:')
+    print(f'   - initialize: {state.initialize}')
+    print(f'   - collect: {state.collect}')
+    print(f'   - validate: {state.validate}')
+    print(f'   - process: {state.process}')
+    print(f'   - save: {state.save}')
 
     pass
 
+
+def ready(sc, x):
+    s.enter(120, 1, ready, (sc, x))
+    start()
+    pass
+
+
+# start()
 if __name__ == '__main__':
-# if False:
+    if TEST:
+        ctrl = Controller()
+        ctrl.test()
+    else:
 
-    paths = glob(os.path.join('sample_data/', '*.json'))
-    paths.sort()
+        print(f'scheduler initialized at {utc_now()}')
+
+        # ? schedule itterator to run every 2 mins
+        s = sched.scheduler(time.time, time.sleep)
+        s.enter(120, 1, ready, (s, None))
+        s.run()
 
 
-    for path in paths:
-        # print(path)
-        feature_collection = json.load(open(path))
-        ps = ProbSevere(feature_collection)
-
-
+if False:
+    ctrl = Controller()
+    ctrl.test()
+    # paths = glob(os.path.join('sample_data/', '*.json'))
+    # paths.sort()
+    # for path in paths:
+    #     feature_collection = json.load(open(path))
+    #     ps = ProbSevere(feature_collection)
+    #     print(ps.feature_collection['features'][-1])

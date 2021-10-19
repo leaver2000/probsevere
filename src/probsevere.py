@@ -1,80 +1,86 @@
-
-import json
-from types import SimpleNamespace
 import numpy as np
-# from numpy.core.arrayprint import _make_options_dict
-from sklearn.metrics.pairwise import haversine_distances
-from sklearn.linear_model import LinearRegression
-from geopy import distance
-# from geopy import Point
-# from geopy.distance import distance, VincentyDistance
-from pprint import pprint
-from datetime import datetime
 from stormtrack import StormTrack
-from helpers import ReduceObject
+from helpers import FeatureCollection, Feature
 
 
+DESCRIPTION = """
+alterations have been made to the NSSL MRMS ProbSevere output.
+The models section was removed because in many cases they were
+redundant.  Only the properties, coordinates, and prob values
+have been retained. Additionally a storm track algorithm plots
+coordinate postions for the movement of the storm.
+
+NOTE: due to this model being fed directly to a Leaflet Web
+application which utilizes an inversed lat/lon shema all lat/lons
+are inverted.
+"""
 
 st = StormTrack()
 
+# ? reshape the ProbSevere FeatureCollection
+
 
 class ProbSevere:
-    def __init__(self, features):
+    def __init__(self, feature_collection):
+        # * initialize feature_collection as fc
+        fc = FeatureCollection(feature_collection)
+        self.datetime = fc.datetime
+        print(f'initalizing new probsevere {fc.datetime} UTC')
 
-        # self._reduce_features(features)
-        x = ReduceObject(features, delete='models')
+        # * set feature collection
+        self.feature_collection = {
+            'source': fc.source,
+            'product': fc.product,
+            'validTime': fc.validTime[:-6],
+            'type': fc.type,
+            'description': None,
+            # !
+            'features': [self._use(Feature(feature), fc) for feature in fc.features]
 
-        print(f'initalizing new probsevere {x.validTime} UTC')
-        print(x.validTime.minute)
-
-
-
-        self.features =[]
-        for feature in x.features:
-            coordinates = feature['geometry']['coordinates']
-            properties = feature['properties']
-            _id = properties['ID']
-            st.set_storm(_id=_id, validTime=x.validTime, coordinates=coordinates, properties=properties)
-            tracks = st.getStormTracksById(_id)
-            if tracks is not None:
-                print(tracks)
-                pass
- 
-
-            if False:
-                center, mps, tracks = motion
-                # if int(properties['PS']) > 20:
-                feature['models']['probtrack'] = {
-                    'center': [center.tolist()],
-                    'linear': [tracks.tolist()]
-                }
-                print(feature)
-
-                # pprint(feature['models'])
-                if True:
-
-                    print(f'\nstormId: {_id}')
-                    # print(st.time)
-                    print(f'probSevere: {properties["PS"]}%')
-                    print(f'start:\n {center}')
-                    print(f'mps:\n {mps}')
-                    print(f'knots:\n {mps*1.94384}')
-                    print(f'coordinates @ 1hr:\n {tracks.tolist()}')
-
-        self.feature_collection ={
-            'validTime': x.validTime,
-            'features': self.features
         }
 
-    def _reduce_features(self,features):
-        for feature in features['features']:
-            del feature['models']
-        self.feature_collection = features
+    # ? (self, feature, feature_collection)
+    def _use(self, f, fc):
+        st.storm_track(feature=f, validTime=fc.validTime)
+        # ! call to StormTrack
+        center, linear = st.getGeometryCollection(f._id)
+        # print(f.properties)
 
-    def _set_track(self):
-        pass
+        return {
+            'properties': f.properties,
+            # ? The Geometry object is reconstructed as a GeomertyCollection.
+            # ? Point and MulitiLineString value are set in the Object.
+            # ? Coordinates formated consistent with the Leaflet map application.
+            'geometry': {
+                "type": "GeometryCollection",
+                "geometries": [{
+                    "type": "LeafletPoint",
+                    "coordinates": np.flip([center], (0, 1)).flatten().tolist()
+                }, {
+                    "type": "LeafletPolygon",
+                    "coordinates": [np.flip(f.coordinates, (0, 1)).tolist()]
+                },
+                    {
+                    "type": "LeafletMultiLineString",
+                    "coordinates": [np.flip(linear, (0, 1)).tolist() if linear is not None else None]
+                }]
+            }
 
-
-    def _load(self, feature):
-        jd = json.dumps(feature)
-        return json.loads(jd, object_hook=lambda d: SimpleNamespace(**d))
+        }
+    # "geometry": { // unique geometry member
+    #   "type": "GeometryCollection", // the geometry can be a GeometryCollection
+    #   "geometries": [ // unique geometries member
+    #     { // each array item is a geometry object
+        # return{
+        #     'geometry': {
+        #         "type": "LeafletPolygon",
+        #         'coordinates': np.flip(f.coordinates, (0, 1)).tolist()
+        #     },
+        #     'properties': f.properties,
+        #     # ! entry point to rebuilding feature object
+        #     # 'vectors': [vectors if vectors is not None else None]
+        #     "vectors": {
+        #         "type": "StormMotionVector",
+        #         "coordinates": [vectors if vectors is not None else None]
+        #     }
+        # }
