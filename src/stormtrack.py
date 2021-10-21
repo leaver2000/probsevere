@@ -1,21 +1,19 @@
-
-import json
-from types import SimpleNamespace
 import numpy as np
-# from numpy.core.arrayprint import _make_options_dict
-from sklearn.metrics.pairwise import haversine_distances
-from sklearn.linear_model import LinearRegression
-from geopy import distance
-# from geopy import Point
-# from geopy.distance import distance, VincentyDistance
-from pprint import pprint
-from datetime import datetime
-# from stormtrack import StormTrack
-from helpers import Object, StormHistory, StormMotionVector
+from stormutility import LRU, StormObject, Current
+# from sklearn.metrics.pairwise import haversine_distances
+# from sklearn.linear_model import LinearRegression
+import average as avg
+import nvector as nv
+import pandas as pd
+from pygc import great_circle
 R = 6371000
 RANGE = 10
-# standard_deviation = 95%
+# COMMENT COLOR CODE
+# !  ATTENTION -> NEEDS DEVELOPMENT
+# *  DESCRIPTION ->
+# ?  INFO ->
 
+# standard_deviation = 95%
 PROPSKEYS = [
     'MUCAPE',
     'MLCAPE',
@@ -34,158 +32,182 @@ PROPSKEYS = [
 
 
 class StormTrack:
-    _storm = {}
-    _verbose = False
+    _lru = LRU(250)
 
-    # def set_storm(self, validTime=None, _id=None, coordinates=None, properties=None):
-    def storm_track(self, feature=None, validTime=None):
+    def get_storm_tracks(self, _id):
+        # ? get StormObject from LRU by ID
+        x = self._lru.get(_id)
+        # ? get stormtrack from StormObject
+        return getattr(x, 'center'), getattr(x, 'stormtrack')
+
+    def __init__(self, feature=None, validtime=None):
+
         coordinates = feature.coordinates
         properties = feature.properties
         _id = feature._id
-        # validTime = feature.validTime
+        self._id = _id
 
-        # crds = np.squeeze(coordinates)
-        center = np.mean(coordinates, axis=0)
-        self.center = center
-        propV = np.array(list(properties.values()))[:13]
-        props = np.array(propV, dtype=np.float16)
+        # ? values in c are the current storm values
+        # ? avaliable attributes in c are area and center
+        c = Current(coordinates)  # * current object is c
+        setattr(c, 'validtime', validtime)
 
-        # * if the _storm object does not contain the _storm[_id] key a new _storm[_id] object is created
-        must_init = _id not in self._storm.keys()
-        if must_init:
-            self._storm[_id] = StormHistory()  # *  initialize _storm[_id]
-            x = self._storm[_id]  # *  x is given the value of _storm[_id]
-
-            # ? first order attributes
-            x.count = 1
-            x.coordinates = coordinates
-            x.center = center
-            x.props = props
-            x.time = {
-                'start': validTime,
-                'end': validTime
-            }
-
-            # ? second, third, & fouth order placeholders
-            x.mps = None  # *   meters per second
-            x.smv = None  # * storm motion vector
-            x.hst = {
-                'centers': [center],
-                'mps': None,  # *  meters per second history
-                'smv': None  # * storm motion vector history
-            }
-            x.mpsX = None  # * meters per second maX
-            x.mpsN = None  # * meters per second miN
-            x.mpsA = None  # * meters per second Avg
-            x.tracks = {
-                'center': center,
-                'motion': None,
-                'linear': None
-            }
+        # ? look for the storm _id in the Least Recently Used Cache
+        # ? STAGE 0: [INITALIZE STORM]
+        if not self._lru.peek(_id):
+            x = StormObject(_id, c)  # * initialize StormObject with C
+            setattr(x, 'properties', properties)  # * set props
+            setattr(x, 'validtime', validtime)
+            self._lru.add(_id, x)  # * add StormObject to cache
 
         else:
+            x = self._lru.get(_id)  # * existing StormObject()
 
-            x = self._storm[_id]  # * x is set to previous _storm[_id]
+            # ? STAGE 1: [ VALIDATE CENTER ]
+            if np.any(x.center != c.center):  # * verify movement
 
-            # * pass x.center and current center returns meters/second and the storm motion vector
-            mps, smv = self._motion(x.center, center)
+                # ? STAGE 2: [ ]
+                # * - [ TIME DELTA ]
+                timeD = (c.validtime - x.validtime).total_seconds()
+                # * timeD used by _azimuth_velocity()
+                setattr(c, 'timeD', timeD)
+                # * - [ AZIMUTH VELOCITY ]
+                self._azimuth_velocity(x, c)  # ! change in
 
-            # ? first order attributes
-            x.count = x.count + 1
-            x.coordinates = coordinates
-            x.center = center
-            x.props = props
-            x.time['end'] = validTime
+                # ? STAGE 3: [ QUANTITY CHECK ]
+                if len(x.history.area) < 5:  # *
 
-            # ? second order attributes
-            x.mps = mps  # * meters per second
-            x.smv = smv  # * storm motion vector
+                    # ? STAGE 4a: [ AFFIX c2x ]
+                    # * calculated values from c are
+                    # * affixed -> set & appended 2 x
+                    x.affix('validtime', validtime)
+                    x.affix('center', c.center)
+                    x.affix('coordinates', c.coordinates)
+                    x.affix('area', c.area)
 
-            # ? third order storm history attributes
-            y = x.hst
-            x.hst = {
-                'centers': centers if y['centers'] is None else np.concatenate((y['centers'], [center]), axis=0),
-                # 'mps': [mps] if y['mps'] is None else [*y['mps'], mps],
-                'mps': [[mps]] if y['mps'] is None else np.concatenate((y['mps'], [[mps]]), axis=0),
-                # storm motion vector value in mps
-                'smv': smv if y['smv'] is None else np.concatenate((y['smv'], smv), axis=0)
-            }
-
-            # ? fourth order storm history mins/max/avg
-            x.mpsX = np.max(x.hst['mps'])  # * meters per second maX
-            x.mpsN = np.min(x.hst['mps'])
-            x.mpsA = np.mean(x.hst['mps'])
-
-            if x.count > RANGE:
-                smv = StormMotionVector(x.hst['smv'])
-                if self._verbose:
-                    print(f'\ncalculating storm track:\nstorm_id: {_id}')
-                    print(f'current center position:\n {center}')
-                    print(
-                        f'applying mean().mps to center\n {smv.mean().mps} mps')
-
-                # np.mean(x.hst['smv'][:-RANGE+1], axis=0)
-                avg_smv = smv.mean().mps
-                offsets = [900, 1800, 2700, 3600]
-                stormtrack = []
-                for offset in offsets:
-                    D60 = avg_smv*offset  # ? X 3600 = per hour
-
-                    lat, lon = center  # ? destructure center
-
-                    Dy, Dx = D60.flatten()  # ? destructure change in ( Y, X )
-
-                    # ! MATH
-                    _180pi = 180 / np.pi
-                    cos = np.cos(lat * np.pi/180)
-                    lat60 = lat + (Dy / R) * (_180pi)
-                    lon60 = lon + (Dx / R) * (_180pi) / cos
-                    stormtrack.append([lat60, lon60])
-
-                x.tracks = {
-                    'center': center,
-                    'motion': mps,
-                    'linear': stormtrack
-                }
-            else:
-                x.tracks = {
-                    'center': center,
-                    'motion': mps,
-                    'linear': None
-                }
-
-            if self._verbose:
-                try:
-                    print(f'\n{x.center}')
-                    print(f'{x.mps} mps')
-                    print(f'{x.tracks} tracks')
-                except:
-                    print(f'no tracks count = {x.count}')
+                    x.affix('azimuth', c.azimuth)
+                    x.affix('velocity', c.velocity)
                     pass
+                else:
+                    index = np.s_[-5:]
+                    # * standard_deviation = 95%
+                    a_d = self._deviates('area', x, c, index=index)
+                    v_d = self._deviates('velocity', x, c, index=index)
+                    az_d = self._deviates('azimuth', x, c, index=index)
+                    # print(az_d)
 
-    def _motion(self, start, stop):
-        # * positional diffrence
-        diff = np.diff([start, stop], axis=0)
+                    # ? STAGE 5: [ MAKE PREDICTION ]
+                    # if not a_d and not v_d:
+                    if True:
 
-        # ? y diff value == negative ? the storm moved south: north
-        # ? x diff value == negative ? the storm moved west: east
-        vector = np.where(diff > 0, 1, -1)
+                        # ? GENERATE LINEAR STORM PLOT
+                        self._extrapolate(x, c)
 
-        mps = distance.distance(*np.flip([start, stop])).meters / 120
-        rads = np.radians([start, stop])
-        # * haversine distance between 2 points
-        # # convert 2 min to second
-        # # radians per second
+                        x.affix('validtime', validtime)
+                        x.affix('center', c.center)
+                        x.affix('coordinates', c.coordinates)
+                        x.affix('area', c.area)
+                        x.affix('azimuth', c.azimuth)
+                        x.affix('velocity', c.velocity)
+                        x.affix('stormtrack', c.stormtrack)
+                    else:
+                        # ! REMOVE AREA VELOCITY OUTLIERS
+                        pass
+                # * excessive growth in area is expected
+                # * to throw off the storm track
 
-        result = np.add(*haversine_distances(rads))
-        # multiply by Earth radius to get kilometers
+                # CHANGE IN TIME
 
-        motion = result * 6371000 / 120
-        storm_motion_vector = np.multiply(motion, vector)
+                # * calculate motion from previous to current pos
+                # self._set_storm_motion_vector(x, c)  # ? stt val mps
+                # self._set_area_change(x, c)
 
-        return mps, storm_motion_vector
+                # # ? STAGE 4: [ AFFIX c2x ]
+                # # * calculated values from c are
+                # # * affixed -> set & appended 2 x
+                # x.affix('validtime', validtime)
+                # x.affix('center', c.center)
+                # x.affix('coordinates', c.coordinates)
 
-    def getGeometryCollection(self, _id):
-        x = self._storm[_id].tracks
+            else:
+                # * storm centers with no change in movement are not recorded
+                pass
 
-        return x['center'], x['linear']
+    def _deviates(self, key, x, c, index=np.s_[-5:], sd=0.95):
+        """ 
+        returns True if a current value deviates from
+        from x.history beyond standard deviation threshold.
+
+        default values:
+
+        last=5 # last 5 history key array values.
+        """
+
+        x_val = getattr(x.history, key)  # * hst val from key
+        c_val = getattr(c, key)  # * curr val from key
+        # print(x_value[index])
+        mean = np.mean(x_val[index])
+        diff = np.diff([mean, c_val])
+
+        return bool(diff / mean * 1 > sd)
+
+    def _extrapolate(self, x, c):
+        lon, lat = c.center
+        vel_trnds = x.history.velocity[-5:]
+        vel_mean = np.mean(np.append(vel_trnds, c.azimuth))
+
+        azi_trnds = x.history.azimuth[-5:]
+        azi_avg = avg.azimuth(np.append(azi_trnds, c.azimuth))
+
+        time_deltas = [1, 900, 1800, 2700, 3600]
+        timeD = np.multiply(vel_mean, time_deltas)
+
+        gc = great_circle(distance=timeD, azimuth=azi_avg,
+                          latitude=lat, longitude=lon)
+        lons_lats = np.array([gc['longitude'], gc['latitude']])
+
+        stormtrack = np.rollaxis(lons_lats, 1, 0)
+
+        setattr(c, 'stormtrack', stormtrack)
+
+        TEXT = f"""
+                STORMID: {self._id}
+VELOCITY:
+ - current: {c.velocity} mps
+ - mean: {vel_mean} mps
+ - trends:[\n {vel_trnds}
+]
+
+AZIMUTH:
+ - current: {c.azimuth}°
+ - mean: {azi_avg}°
+ - trends:[\n {azi_trnds}
+ ]
+                """
+        # print(TEXT)
+
+        pass
+
+    def _azimuth_velocity(self, x, c):  # ? change in vector
+        lonX, latX = x.center  # * x->PREVIOUS
+        lonC, latC = c.center  # * c->CURRENT
+        wgs84 = nv.FrameE(name='WGS84')
+
+        pointC = wgs84.GeoPoint(  # * CURRENT CENTER POINT
+            latitude=latC, longitude=lonC, z=0, degrees=True)
+
+        pointX = wgs84.GeoPoint(  # * PREVIOUS CENTER POINT
+            latitude=latX, longitude=lonX, z=0, degrees=True)
+
+        A2B = pointX.delta_to(pointC)  # * PREVIOUS DELTA TO CURRENT
+        # xD, yD, zD = A2B.pvector.ravel()
+        # * velocity = DISTANCE OVER TIME DELTA
+        velocity = A2B.length/c.timeD
+
+        az = A2B.azimuth_deg
+        azimuth = np.where(az > 0, az, az+360)
+
+        setattr(c, 'velocity', velocity)
+        setattr(c, 'azimuth', azimuth)
+
+        pass

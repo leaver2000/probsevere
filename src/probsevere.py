@@ -1,6 +1,11 @@
 import numpy as np
 from stormtrack import StormTrack
-from helpers import FeatureCollection, Feature
+from stormutility import FeatureCollection, Feature
+from datetime import datetime
+
+
+def utc_now():
+    return datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
 
 
 DESCRIPTION = """
@@ -15,7 +20,7 @@ application which utilizes an inversed lat/lon shema all lat/lons
 are inverted.
 """
 
-st = StormTrack()
+# st = StormTrack()
 
 # ? reshape the ProbSevere FeatureCollection
 
@@ -24,30 +29,33 @@ class ProbSevere:
     def __init__(self, feature_collection):
         # * initialize feature_collection as fc
         fc = FeatureCollection(feature_collection)
+
         self.datetime = fc.datetime
-        print(f'initalizing new probsevere {fc.datetime} UTC')
+        # print(f'initalizing new probsevere {fc.datetime} UTC')
 
         # * set feature collection
         self.feature_collection = {
             'source': fc.source,
             'product': fc.product,
-            'validTime': fc.validTime[:-6],
+            'validTime': fc.validTime,
             'type': fc.type,
             'description': None,
-            # !
-            'features': [self._use(Feature(feature), fc) for feature in fc.features]
+            # ? FOR FEATURE IN FEATURES USE FEATURE CLASS OBJECT
+            'features': [self._use(Feature(feature), fc.datetime) for feature in fc.features]
 
         }
 
     # ? (self, feature, feature_collection)
-    def _use(self, f, fc):
-        st.storm_track(feature=f, validTime=fc.validTime)
-        # ! call to StormTrack
-        center, linear = st.getGeometryCollection(f._id)
-        # print(f.properties)
+    def _use(self, f, validtime):
+
+        st = StormTrack(feature=f, validtime=validtime)
+        # ! get_storm_tracks by feature Id
+        center, tracks = st.get_storm_tracks(f._id)
+        # print(f._id)
 
         return {
             'properties': f.properties,
+            '_id': f._id,
             # ? The Geometry object is reconstructed as a GeomertyCollection.
             # ? Point and MulitiLineString value are set in the Object.
             # ? Coordinates formated consistent with the Leaflet map application.
@@ -62,25 +70,8 @@ class ProbSevere:
                 },
                     {
                     "type": "LeafletMultiLineString",
-                    "coordinates": [np.flip(linear, (0, 1)).tolist() if linear is not None else None]
+                    "coordinates": np.flip(tracks, (0, 1)).tolist() if tracks is not None else None
                 }]
             }
 
         }
-    # "geometry": { // unique geometry member
-    #   "type": "GeometryCollection", // the geometry can be a GeometryCollection
-    #   "geometries": [ // unique geometries member
-    #     { // each array item is a geometry object
-        # return{
-        #     'geometry': {
-        #         "type": "LeafletPolygon",
-        #         'coordinates': np.flip(f.coordinates, (0, 1)).tolist()
-        #     },
-        #     'properties': f.properties,
-        #     # ! entry point to rebuilding feature object
-        #     # 'vectors': [vectors if vectors is not None else None]
-        #     "vectors": {
-        #         "type": "StormMotionVector",
-        #         "coordinates": [vectors if vectors is not None else None]
-        #     }
-        # }

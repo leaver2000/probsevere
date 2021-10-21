@@ -28,15 +28,16 @@ class Timestamps:
 
 
 class State:
-    initialize = False
-    collect = False
-    process = False
-    process = False
-    save = False
+    def __init__(self):
+        self.initialize = False
+        self.collect = False
+        self.process = False
+        self.validate = False
+        self.save = False
 
 
 class Controller:
-    state = State()
+    # state = State()
 
     validTimes = list()
     baseproduct = {
@@ -48,6 +49,8 @@ class Controller:
     }
 
     def __init__(self):
+        self.state = State()
+
         try:
             resp = bp.find_one({'name': 'probsevere'}, {
                                "validTimes": 1, '_id': 0})
@@ -123,7 +126,3 @@ class Controller:
             fc = ProbSevere(feature_collection)
             self.feature_collection = fc.feature_collection
             self.datetime = fc.datetime
-
-            # print(fc.feature_collection)
-
-            # print(ps.feature_collection['features'][-1])

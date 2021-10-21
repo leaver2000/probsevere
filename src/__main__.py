@@ -4,9 +4,9 @@ from glob import glob
 import sched
 import time
 from controller import Controller
-from helpers import utc_now
+from stormutility import utc_now
 
-TEST = False
+TEST = True
 
 
 def start():
@@ -17,14 +17,14 @@ def start():
 
     ctrl.collect()  # ? scrape mrms dataset
 
-    if state.collect is not None:
+    if state.collect:
         ctrl.validate()  # ? validate data requirement
         ctrl.process()  # ? process data
         if ctrl.datetime.minute % 10 == 0:
             ctrl.save()
 
-    else:
-        print('skipping save on non 10 min interval')
+        else:
+            print('skipping save on non 10 min interval')
 
     print(f'\ncontroller routine completed {utc_now()}\n state:')
     print(f'   - initialize: {state.initialize}')
@@ -45,6 +45,7 @@ def ready(sc, x):
 # start()
 if __name__ == '__main__':
     if TEST:
+        # pass
         ctrl = Controller()
         ctrl.test()
     else:
