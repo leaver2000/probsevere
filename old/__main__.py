@@ -6,7 +6,7 @@ import time
 from controller import Controller
 from stormutility import utc_now
 
-TEST = True
+TEST = False
 
 
 def start():

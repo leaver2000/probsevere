@@ -1,12 +1,16 @@
 {
-  "name": "probsevere",
-  "version": "1.0.0",
-  "license": "MIT",
-  "scripts": {
-    "start": "nodemon --watch src/ --exec python3 src ",
-    "test": "nodemon test.py"
-  },
-  "dependencies": {
-    "nodemon": "^2.0.13"
-  }
+	"name": "tarpan",
+	"version": "1.0.0",
+	"main": "index.js",
+	"license": "MIT",
+	"scripts": {
+		"test": "nodemon --exec python3 test/route.py"
+	},
+	"nodemonConfig": {
+		"ext": "py",
+		"watch": [
+			"test/",
+			"tafgen/"
+		]
+	}
 }

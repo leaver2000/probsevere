@@ -1,4 +1,0 @@
-{
-  "watch": ["__main__.py", "src/"],
-  "ext": "py"
-}

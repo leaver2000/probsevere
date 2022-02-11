@@ -31,7 +31,7 @@ class ProbSevere:
         fc = FeatureCollection(feature_collection)
 
         self.datetime = fc.datetime
-        # print(f'initalizing new probsevere {fc.datetime} UTC')
+        print(f'initalizing new probsevere {fc.datetime} UTC')
 
         # * set feature collection
         self.feature_collection = {
